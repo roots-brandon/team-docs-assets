@@ -10,6 +10,7 @@
 //   maskColor        -> optional background for the mask (default: the menu bar's color)
 //   cleanup(page)    -> optional; undo the UI state without saving (default: Escape)
 //   pad              -> optional crop padding in CSS px (default 8)
+//   beforeShot(page) -> optional last check right before the screenshot; throw to abort
 
 const openMenu = async (page, menuId) => {
   await page.locator(`#${menuId}`).click();
@@ -46,7 +47,8 @@ const versionSubmenu = (page) =>
 // outline with data-tda attributes.
 const tagged = (page, name) => page.locator(`[data-tda="${name}"]`);
 const editsCounter = async (page) => {
-  const parts = [page.getByText(/^Total: \d+ edits?$/).first(),
+  // Reads "Total: N edits" until you step through them, then "Edit 1 of N".
+  const parts = [page.getByText(/Total: \d+ edits?|Edit \d+ of \d+/).first(),
     page.getByRole('button', { name: /^Previous edit/ }).first(),
     page.getByRole('button', { name: /^Next edit/ }).first()];
   const b = await Promise.all(parts.map((p) => p.boundingBox()));
@@ -55,17 +57,39 @@ const editsCounter = async (page) => {
   return { x: x0 - 4, y: y0, width: x1 - x0 + 8, height: y1 - y0 };
 };
 
+// Checkbox plus its label; the label's text overflows its own box, so pad the right side.
+const highlightToggle = async (page) => {
+  const box = await page.getByRole('checkbox', { name: 'Highlight changes' }).first().boundingBox();
+  const label = await page.getByText('Highlight changes', { exact: true }).first().boundingBox();
+  const x1 = Math.max(box.x + box.width, label.x + label.width) + 12;
+  const y0 = Math.min(box.y, label.y), y1 = Math.max(box.y + box.height, label.y + label.height);
+  return { x: box.x - 6, y: y0 - 4, width: x1 - box.x + 6, height: y1 - y0 + 8 };
+};
+
 // Replace editor names everywhere on the page (panel rows, in-doc name flags) with a
 // neutral label. Names are read from the page at runtime, so none are stored in this repo.
+// Docs renders name flags lazily while scrolling, so a MutationObserver keeps scrubbing,
+// and assertNoEditorNames() refuses the shot if anything slipped through.
 const scrubEditorNames = (page, label = 'Team member') => page.evaluate((label) => {
   const names = new Set([...document.querySelectorAll('.appsDocsRevisionsWizSidebarAuthorInfo')]
-    .map((e) => e.innerText.trim()).filter(Boolean));
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-    if (names.has(n.nodeValue.trim())) n.nodeValue = label;
-  }
-  return [...names].length;
+    .map((e) => e.innerText.trim()).filter((n) => n && n !== label));
+  window.__tdaNames = [...names];
+  const scrub = (root) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (names.has(n.nodeValue.trim())) n.nodeValue = label;
+    }
+  };
+  scrub(document.body);
+  new MutationObserver((muts) => muts.forEach((m) => scrub(m.target.nodeType === 3 ? m.target.parentNode : m.target)))
+    .observe(document.body, { subtree: true, childList: true, characterData: true });
 }, label);
+
+const assertNoEditorNames = async (page) => {
+  const hits = await page.evaluate(() => (window.__tdaNames ?? [])
+    .filter((n) => document.body.innerText.includes(n)).length);
+  if (hits) throw new Error(`${hits} editor name(s) still visible; refusing to capture`);
+};
 
 export const recipes = {
   'notifications-menu': {
@@ -128,20 +152,27 @@ export const recipes = {
       await page.waitForTimeout(1500);
       await page.getByRole('button', { name: /^Next edit/ }).first().click();
       await page.waitForTimeout(1200);
+      // Next edit lands the change near the bottom; bring the changed section into the frame.
+      await page.mouse.move(620, 450);
+      await page.mouse.wheel(0, 1030);
+      await page.waitForTimeout(1200);
       await page.evaluate(() => {
-        // The selected version tile: climb from its author row to the full-width card.
+        // The selected version tile: climb from its author row to the card that also holds
+        // the version's date (the author row alone is one line tall).
         let el = document.querySelector('.appsDocsRevisionsWizSidebarAuthorInfo');
-        while (el && el.getBoundingClientRect().width < 280) el = el.parentElement;
+        while (el && el.getBoundingClientRect().height < 70) el = el.parentElement;
         el?.setAttribute('data-tda', 'tile');
-        const label = [...document.querySelectorAll('label')].find((l) => l.textContent.trim() === 'Highlight changes');
-        label?.parentElement?.setAttribute('data-tda', 'highlight-toggle');
       });
       await scrubEditorNames(page);
       await page.mouse.move(640, 790);
     },
-    highlight: (page) => [tagged(page, 'tile'), tagged(page, 'highlight-toggle'), editsCounter(page)],
+    highlight: (page) => [tagged(page, 'tile'), highlightToggle(page), editsCounter(page)],
     crop: (page) => [{ x: 0, y: 0, ...page.viewportSize() }],
     pad: 0,
+    beforeShot: async (page) => {
+      await page.waitForTimeout(1500); // let lazily drawn name flags appear (and get scrubbed)
+      await assertNoEditorNames(page);
+    },
     cleanup: (page) => page.getByRole('button', { name: 'Back' }).first().click(),
   },
 };

@@ -145,7 +145,8 @@ async function captureRow(ctx, row) {
   // Recipes may return locators or plain boxes, synchronously or not.
   const boxesOf = async (fn) => Promise.all((await fn(page)).map((t) => toBox(t).catch(() => null)));
   const hlBoxes = await boxesOf(recipe.highlight);
-  if (hlBoxes.some((b) => !b?.width)) throw new Error(`Highlight target not visible for ${row.id}`);
+  const missing = hlBoxes.flatMap((b, i) => (b?.width ? [] : [i]));
+  if (missing.length) throw new Error(`Highlight target(s) ${missing.join(', ')} not visible for ${row.id}`);
   const cropBoxes = await boxesOf(recipe.crop);
   const arrowBox = recipe.arrowTo != null ? hlBoxes[recipe.arrowTo] : null;
   if (arrowBox) cropBoxes.push({ ...arrowBox, width: arrowBox.width + ARROW_LEN });
@@ -157,6 +158,7 @@ async function captureRow(ctx, row) {
     await mask(page, keep, (recipe.shadowOn ?? []).map((i) => keep[i]), recipe.maskColor);
   }
   await annotate(page, hlBoxes, arrowBox);
+  if (recipe.beforeShot) await recipe.beforeShot(page);
 
   const rel = `${DOC_FOLDER}/${row.id}.png`;
   await page.screenshot({ path: path.join(ROOT, rel), clip: crop, animations: 'disabled' });
