@@ -13,6 +13,6 @@
     "steps": "Tools > Notification settings; select the recommended options; capture; Cancel (do not save)",
     "highlight": "Comments and tasks for you; Added or removed content",
     "alt_text": "Notification settings dialog with Comments and tasks for you and Added or removed content selected",
-    "status": "todo"
+    "status": "done"
   }
 ]
