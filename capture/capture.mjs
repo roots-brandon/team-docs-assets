@@ -38,19 +38,29 @@ function union(boxes, pad) {
 const intersects = (a, b) =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
-const toBox = async (t) => (typeof t.boundingBox === 'function' ? t.boundingBox() : t);
+// Locators become their box plus corner radius (so masks follow rounded dialogs); boxes pass through.
+async function toBox(t) {
+  if (typeof t.boundingBox !== 'function') return { r: 0, ...t };
+  const r = await t.evaluate((el) => parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0);
+  return { ...(await t.boundingBox()), r };
+}
+
+const roundedRect = ({ x, y, width: w, height: h, r }) =>
+  `M${x + r} ${y} H${x + w - r} A${r} ${r} 0 0 1 ${x + w} ${y + r} V${y + h - r} ` +
+  `A${r} ${r} 0 0 1 ${x + w - r} ${y + h} H${x + r} A${r} ${r} 0 0 1 ${x} ${y + h - r} ` +
+  `V${y + r} A${r} ${r} 0 0 1 ${x + r} ${y} Z`;
 
 // Paint everything except the focus boxes with plain background; shadow the surfaces.
-async function mask(page, keep, shadowed) {
-  await page.evaluate(({ keep, shadowed, fallback }) => {
+async function mask(page, keep, shadowed, override) {
+  const holes = keep.map(roundedRect).join(' ');
+  await page.evaluate(({ holes, shadowed, fallback, override }) => {
     // Match the menu bar's actual background so kept strips have no visible seam.
-    let color = fallback;
-    for (let el = document.getElementById('docs-menubar'); el; el = el.parentElement) {
+    let color = override ?? fallback;
+    for (let el = document.getElementById('docs-menubar'); !override && el; el = el.parentElement) {
       const bg = getComputedStyle(el).backgroundColor;
       if (bg && bg !== 'transparent' && !/rgba\(.*,\s*0\)$/.test(bg)) { color = bg; break; }
     }
     const { innerWidth: w, innerHeight: h } = window;
-    const holes = keep.map((b) => `M${b.x} ${b.y} h${b.width} v${b.height} h${-b.width} Z`).join(' ');
     const layer = document.createElement('div');
     layer.id = '__tda_mask';
     layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483646';
@@ -62,11 +72,11 @@ async function mask(page, keep, shadowed) {
       // Outer box-shadow only paints outside the box, so the surface itself stays untouched.
       const s = document.createElement('div');
       s.style.cssText = `position:fixed;left:${b.x}px;top:${b.y}px;width:${b.width}px;height:${b.height}px;` +
-        'border-radius:4px;box-shadow:0 1px 3px rgba(60,64,67,.3),0 4px 8px 3px rgba(60,64,67,.15)';
+        `border-radius:${b.r || 4}px;box-shadow:0 1px 3px rgba(60,64,67,.3),0 4px 8px 3px rgba(60,64,67,.15)`;
       layer.appendChild(s);
     }
     document.body.appendChild(layer);
-  }, { keep, shadowed, fallback: MASK_FALLBACK });
+  }, { holes, shadowed, fallback: MASK_FALLBACK, override });
 }
 
 async function annotate(page, boxes, arrowBox) {
@@ -138,19 +148,20 @@ async function captureRow(ctx, row) {
   for (const l of recipe.crop(page)) cropBoxes.push(await l.boundingBox());
   const arrowBox = recipe.arrowTo != null ? hlBoxes[recipe.arrowTo] : null;
   if (arrowBox) cropBoxes.push({ ...arrowBox, width: arrowBox.width + ARROW_LEN });
-  const crop = union([...cropBoxes, ...hlBoxes], PAD);
+  const crop = union([...cropBoxes, ...hlBoxes], recipe.pad ?? PAD);
 
   const leaks = await redact(page, crop);
   if (recipe.focus) {
     const keep = await Promise.all((await recipe.focus(page)).map(toBox));
-    await mask(page, keep, (recipe.shadowOn ?? []).map((i) => keep[i]));
+    await mask(page, keep, (recipe.shadowOn ?? []).map((i) => keep[i]), recipe.maskColor);
   }
   await annotate(page, hlBoxes, arrowBox);
 
   const rel = `${DOC_FOLDER}/${row.id}.png`;
   await page.screenshot({ path: path.join(ROOT, rel), clip: crop, animations: 'disabled' });
   await page.evaluate(() => ['__tda_annot', '__tda_mask'].forEach((id) => document.getElementById(id)?.remove()));
-  await page.keyboard.press('Escape');
+  // Leave the doc as found: recipes that change settings must close without saving.
+  await (recipe.cleanup ? recipe.cleanup(page) : page.keyboard.press('Escape'));
   const size = `${Math.round(crop.width * SCALE)}x${Math.round(crop.height * SCALE)}`;
   return { id: row.id, rel, leaks, size };
 }

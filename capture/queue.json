@@ -6,5 +6,13 @@
     "highlight": "Tools menu item and Notification settings entry",
     "alt_text": "Tools menu with Notification settings highlighted",
     "status": "done"
+  },
+  {
+    "id": "notifications-dialog",
+    "start_url": "https://docs.google.com/document/d/1sfr1OJLvi4PDzKdEStJvWiX4uhxo1Z8B_PCkoe2dSA4/edit",
+    "steps": "Tools > Notification settings; select the recommended options; capture; Cancel (do not save)",
+    "highlight": "Comments and tasks for you; Added or removed content",
+    "alt_text": "Notification settings dialog with Comments and tasks for you and Added or removed content selected",
+    "status": "todo"
   }
 ]
