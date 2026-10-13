@@ -13,7 +13,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
 const only = args.includes('--only') ? args[args.indexOf('--only') + 1] : null;
-const PAD = 12;
+const PAD = 8;
+const MASK_FALLBACK = '#f9fbfd'; // Docs' chrome background, if the menu bar's can't be read
 const ARROW_LEN = 72;
 
 // Things that must never appear in a public image: account, avatar, doc title, sharing.
@@ -36,6 +37,37 @@ function union(boxes, pad) {
 
 const intersects = (a, b) =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+const toBox = async (t) => (typeof t.boundingBox === 'function' ? t.boundingBox() : t);
+
+// Paint everything except the focus boxes with plain background; shadow the surfaces.
+async function mask(page, keep, shadowed) {
+  await page.evaluate(({ keep, shadowed, fallback }) => {
+    // Match the menu bar's actual background so kept strips have no visible seam.
+    let color = fallback;
+    for (let el = document.getElementById('docs-menubar'); el; el = el.parentElement) {
+      const bg = getComputedStyle(el).backgroundColor;
+      if (bg && bg !== 'transparent' && !/rgba\(.*,\s*0\)$/.test(bg)) { color = bg; break; }
+    }
+    const { innerWidth: w, innerHeight: h } = window;
+    const holes = keep.map((b) => `M${b.x} ${b.y} h${b.width} v${b.height} h${-b.width} Z`).join(' ');
+    const layer = document.createElement('div');
+    layer.id = '__tda_mask';
+    layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483646';
+    const cover = document.createElement('div');
+    cover.style.cssText = `position:fixed;inset:0;background:${color};` +
+      `clip-path:path(evenodd,"M0 0 H${w} V${h} H0 Z ${holes}")`;
+    layer.appendChild(cover);
+    for (const b of shadowed) {
+      // Outer box-shadow only paints outside the box, so the surface itself stays untouched.
+      const s = document.createElement('div');
+      s.style.cssText = `position:fixed;left:${b.x}px;top:${b.y}px;width:${b.width}px;height:${b.height}px;` +
+        'border-radius:4px;box-shadow:0 1px 3px rgba(60,64,67,.3),0 4px 8px 3px rgba(60,64,67,.15)';
+      layer.appendChild(s);
+    }
+    document.body.appendChild(layer);
+  }, { keep, shadowed, fallback: MASK_FALLBACK });
+}
 
 async function annotate(page, boxes, arrowBox) {
   await page.evaluate(({ boxes, arrowBox }) => {
@@ -109,11 +141,15 @@ async function captureRow(ctx, row) {
   const crop = union([...cropBoxes, ...hlBoxes], PAD);
 
   const leaks = await redact(page, crop);
+  if (recipe.focus) {
+    const keep = await Promise.all((await recipe.focus(page)).map(toBox));
+    await mask(page, keep, (recipe.shadowOn ?? []).map((i) => keep[i]));
+  }
   await annotate(page, hlBoxes, arrowBox);
 
   const rel = `${DOC_FOLDER}/${row.id}.png`;
   await page.screenshot({ path: path.join(ROOT, rel), clip: crop, animations: 'disabled' });
-  await page.evaluate(() => document.getElementById('__tda_annot')?.remove());
+  await page.evaluate(() => ['__tda_annot', '__tda_mask'].forEach((id) => document.getElementById(id)?.remove()));
   await page.keyboard.press('Escape');
   const size = `${Math.round(crop.width * SCALE)}x${Math.round(crop.height * SCALE)}`;
   return { id: row.id, rel, leaks, size };
