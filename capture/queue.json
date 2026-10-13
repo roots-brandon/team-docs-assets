@@ -1,0 +1,10 @@
+[
+  {
+    "id": "notifications-menu",
+    "start_url": "https://docs.google.com/document/d/1sfr1OJLvi4PDzKdEStJvWiX4uhxo1Z8B_PCkoe2dSA4/edit",
+    "steps": "Open Tools menu and leave it open",
+    "highlight": "Tools menu item and Notification settings entry",
+    "alt_text": "Tools menu with Notification settings highlighted",
+    "status": "todo"
+  }
+]

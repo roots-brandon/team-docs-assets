@@ -1,0 +1,14 @@
+{
+  "name": "team-docs-assets",
+  "private": true,
+  "description": "Annotated screenshots for team docs, plus the Playwright job that captures them.",
+  "type": "module",
+  "scripts": {
+    "login": "node capture/login.mjs",
+    "capture": "node capture/capture.mjs",
+    "capture:dry": "node capture/capture.mjs --headed --no-push"
+  },
+  "devDependencies": {
+    "playwright": "1.48.2"
+  }
+}
