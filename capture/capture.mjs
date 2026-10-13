@@ -160,6 +160,14 @@ async function captureRow(ctx, row) {
     await mask(page, keep, (recipe.shadowOn ?? []).map((i) => keep[i]), recipe.maskColor);
   }
   await annotate(page, hlBoxes, arrowBox);
+  if (recipe.fadeBottom) {
+    await page.evaluate(({ crop, h }) => {
+      const f = document.createElement('div');
+      f.style.cssText = `position:fixed;left:${crop.x}px;top:${crop.y + crop.height - h}px;width:${crop.width}px;` +
+        `height:${h}px;pointer-events:none;z-index:2147483647;background:linear-gradient(rgba(255,255,255,0),#fff)`;
+      document.getElementById('__tda_annot').appendChild(f);
+    }, { crop, h: recipe.fadeBottom });
+  }
   if (recipe.beforeShot) await recipe.beforeShot(page);
 
   const rel = `${DOC_FOLDER}/${row.id}.png`;

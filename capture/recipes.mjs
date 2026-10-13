@@ -15,6 +15,7 @@
 //                       training doc when the lesson is about the title bar)
 //   readySelector    -> what to wait for after load (default: the Docs menu bar)
 //   viewport         -> optional { width, height } for this shot (default config VIEWPORT)
+//   fadeBottom       -> optional px; fades the bottom of the shot to white ("list continues")
 
 const openMenu = async (page, menuId) => {
   await page.locator(`#${menuId}`).click();
@@ -159,21 +160,29 @@ export const recipes = {
       await firstLesson.waitFor();
       await page.mouse.move(640, 1100);
       await page.waitForTimeout(800);
-      // Tag the whole tab "pill" (the label alone is narrower than the highlighted row).
+      // Tag the whole tab "pill" (the label alone is narrower than the highlighted row),
+      // and the "Version history" outline entry, where the shot fades out.
       await page.getByText('Lessons', { exact: true }).first().evaluate((el) => {
         while (el && el.getBoundingClientRect().width < 200) el = el.parentElement;
         el?.setAttribute('data-tda', 'tab-pill');
       });
+      await page.evaluate(() => {
+        const hit = [...document.querySelectorAll('body *')].find((e) => !e.children.length
+          && e.textContent.trim() === 'Version history' && e.getBoundingClientRect().x < 300);
+        hit?.setAttribute('data-tda', 'fade-at');
+      });
     },
     highlight: (page) => [tagged(page, 'tab-pill')],
-    // Full sidebar width: from the window edge to just past the pill.
+    // Sidebar width, from "Document tabs" down to the Version history entry (about half the
+    // outline); the bottom fades so the list reads as continuing.
     crop: async (page) => {
       const pill = await tagged(page, 'tab-pill').boundingBox();
       const top = await page.getByText('Document tabs', { exact: true }).first().boundingBox();
-      const bottom = await page.getByText('Screenshot queue', { exact: true }).first().boundingBox();
-      return [{ x: 0, y: top.y, width: pill.x + pill.width + 8, height: bottom.y + bottom.height - top.y }];
+      const end = await tagged(page, 'fade-at').boundingBox();
+      return [{ x: 0, y: top.y, width: pill.x + pill.width + 8, height: end.y + end.height - top.y }];
     },
     pad: 14,
+    fadeBottom: 56,
   },
 
   // The ☆ next to the title. Shows the title of this (public) training doc only; account
