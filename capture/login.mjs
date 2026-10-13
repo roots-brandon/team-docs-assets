@@ -13,4 +13,8 @@ const chrome = spawn(CHROME_EXE, [
   '--no-default-browser-check',
   'https://accounts.google.com/',
 ], { stdio: 'ignore' });
+chrome.on('error', (e) => {
+  console.error(`Could not start Chrome at ${CHROME_EXE} (${e.code}). Set TDA_CHROME to chrome.exe's path.`);
+  process.exitCode = 1;
+});
 chrome.on('exit', () => console.log('Chrome closed; session saved in the profile.'));
