@@ -115,15 +115,16 @@ async function annotate(page, boxes, arrowBox) {
 }
 
 // Hide identifying chrome; report which selectors would have been inside the crop.
-async function redact(page, crop) {
+async function redact(page, crop, allow = []) {
+  const list = REDACT.filter((s) => !allow.includes(s));
   const leaks = [];
-  for (const sel of REDACT) {
+  for (const sel of list) {
     for (const el of await page.locator(sel).all()) {
       const b = await el.boundingBox().catch(() => null);
       if (b && b.width && b.height && intersects(b, crop)) leaks.push(sel);
     }
   }
-  await page.addStyleTag({ content: `${REDACT.join(',')}{visibility:hidden!important}` });
+  await page.addStyleTag({ content: `${list.join(',')}{visibility:hidden!important}` });
   return [...new Set(leaks)];
 }
 
@@ -135,7 +136,7 @@ async function captureRow(ctx, row) {
   if (/accounts\.google\.com/.test(page.url())) {
     throw new Error('Not signed in (redirected to accounts.google.com). Run: npm run login');
   }
-  await page.locator('#docs-menubar').waitFor({ timeout: 30000 });
+  await page.locator(recipe.readySelector ?? '#docs-menubar').first().waitFor({ timeout: 30000 });
   await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
   await page.keyboard.press('Escape'); // dismiss any promo bubble
 
@@ -152,7 +153,7 @@ async function captureRow(ctx, row) {
   if (arrowBox) cropBoxes.push({ ...arrowBox, width: arrowBox.width + ARROW_LEN });
   const crop = union([...cropBoxes, ...hlBoxes], recipe.pad ?? PAD);
 
-  const leaks = await redact(page, crop);
+  const leaks = await redact(page, crop, recipe.allowRedact);
   if (recipe.focus) {
     const keep = await Promise.all((await recipe.focus(page)).map(toBox));
     await mask(page, keep, (recipe.shadowOn ?? []).map((i) => keep[i]), recipe.maskColor);

@@ -30,5 +30,21 @@
     "highlight": "Selected version, Highlight changes, edit counter arrows",
     "alt_text": "Version history panel on this doc with the newest version selected and its changes highlighted",
     "status": "done"
+  },
+  {
+    "id": "star-button",
+    "start_url": "https://docs.google.com/document/d/1sfr1OJLvi4PDzKdEStJvWiX4uhxo1Z8B_PCkoe2dSA4/edit",
+    "steps": "Hover the star next to the doc title (tooltip: Star)",
+    "highlight": "Star button",
+    "alt_text": "Doc title bar with the Star button highlighted",
+    "status": "todo"
+  },
+  {
+    "id": "drive-starred",
+    "start_url": "https://drive.google.com/drive/starred",
+    "steps": "Star this doc, open Drive > Starred; hide every item except this doc",
+    "highlight": "Starred in the left menu; this doc",
+    "alt_text": "Google Drive Starred page showing Google Docs Basics",
+    "status": "todo"
   }
 ]

@@ -11,6 +11,9 @@
 //   cleanup(page)    -> optional; undo the UI state without saving (default: Escape)
 //   pad              -> optional crop padding in CSS px (default 8)
 //   beforeShot(page) -> optional last check right before the screenshot; throw to abort
+//   allowRedact      -> REDACT selectors this shot may show (e.g. the title of THIS public
+//                       training doc when the lesson is about the title bar)
+//   readySelector    -> what to wait for after load (default: the Docs menu bar)
 
 const openMenu = async (page, menuId) => {
   await page.locator(`#${menuId}`).click();
@@ -29,6 +32,7 @@ const menubarFrom = async (page, menuId) => {
   return { x: btn.x, y: bar.y, width: right - btn.x, height: bar.height };
 };
 
+const DOC_TITLE = 'Google Docs Basics'; // the public training doc these screenshots document
 const VIEWPORT_SAFE_Y = 790; // bottom-left corner: no hover targets there in Docs
 
 const notificationsDialog = (page) => page.locator('.docs-material-gm-dialog:visible').first();
@@ -141,6 +145,66 @@ export const recipes = {
     arrowTo: 2,
     focus: async (page) => [await menubarFrom(page, 'docs-file-menu'), fileMenuPanel(page), versionSubmenu(page)],
     shadowOn: [1, 2],
+  },
+
+  // The ☆ next to the title. Shows the title of this (public) training doc only; account
+  // chrome on the right stays outside the crop. No hover tooltip: it fades out once the
+  // mask is drawn and leaves a half-painted bubble.
+  'star-button': {
+    steps: (page) => page.mouse.move(5, 790),
+    highlight: (page) => [page.locator('.docs-star-container').first()],
+    crop: (page) => [
+      page.locator('#docs-branding-container, .docs-branding-container').first(),
+      page.locator('#docs-title-widget').first(),
+      page.locator('#docs-save-indicator-badge').first(),
+      page.locator('#docs-tools-menu'),
+    ],
+    pad: 14,
+    // Keep the title row and the menu bar only up to Tools; mask stray menus and toolbar.
+    focus: async (page) => {
+      const box = (sel) => page.locator(sel).first().boundingBox();
+      const [brand, save, bar, tools] = await Promise.all(['#docs-branding-container, .docs-branding-container',
+        '#docs-save-indicator-badge', '#docs-menubar', '#docs-tools-menu'].map(box));
+      const left = brand.x - 14;
+      return [
+        // Everything above the menu bar (logo, title, title icons), then the bar up to Tools.
+        { x: left, y: 0, width: save.x + save.width + 14 - left, height: bar.y },
+        { x: left, y: bar.y, width: tools.x + tools.width - left, height: bar.height },
+      ];
+    },
+    allowRedact: ['.docs-title-outer', '.docs-title-input', '#docs-title-widget', '.docs-star-container', '#docs-folder'],
+  },
+
+  // Drive > Starred with only this doc showing. The test account has other (private) files
+  // starred; they are hidden before the shot and beforeShot refuses if any name is visible.
+  // Assumes this doc is already starred for the test account (done once, by hand/script).
+  'drive-starred': {
+    readySelector: '[role="gridcell"][data-id]',
+    steps: async (page) => {
+      await page.waitForTimeout(2500);
+      const kept = await page.evaluate((keep) => {
+        const cells = [...document.querySelectorAll('[role="gridcell"][data-id]')];
+        window.__tdaHidden = [];
+        for (const c of cells) {
+          const name = (c.innerText || '').split('\n')[0].trim();
+          if (name === keep) { c.setAttribute('data-tda', 'this-doc'); continue; }
+          window.__tdaHidden.push(name);
+          c.style.setProperty('display', 'none', 'important');
+        }
+        return cells.length - window.__tdaHidden.length;
+      }, DOC_TITLE);
+      if (kept !== 1) throw new Error(`expected this doc once in Starred, found ${kept}`);
+      await page.mouse.move(640, 790);
+      await page.waitForTimeout(800);
+    },
+    highlight: (page) => [page.getByRole('treeitem', { name: 'Starred' }).or(page.getByRole('link', { name: 'Starred' })).first(), tagged(page, 'this-doc')],
+    crop: (page) => [page.getByRole('button', { name: /^New/ }).first(), page.getByRole('heading', { name: 'Starred' }).first(), tagged(page, 'this-doc')],
+    pad: 12,
+    beforeShot: async (page) => {
+      const leaked = await page.evaluate(() => (window.__tdaHidden ?? []).filter((n) => n && document.body.innerText.includes(n)).length);
+      if (leaked) throw new Error(`${leaked} other starred file name(s) still visible; refusing to capture`);
+    },
+    cleanup: async () => {},
   },
 
   // This doc's own history: newest version selected, Highlight changes on, scrolled to the
