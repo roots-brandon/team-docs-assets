@@ -57,8 +57,14 @@ async function annotate(page, boxes, arrowBox) {
       svg.setAttribute('width', '60');
       svg.setAttribute('height', '24');
       svg.style.cssText = `position:fixed;left:${x}px;top:${y - 12}px;overflow:visible`;
-      svg.innerHTML = '<path d="M58 12 H14" stroke="#e53935" stroke-width="4" stroke-linecap="round"/>' +
-        '<path d="M2 12 L18 3 L18 21 Z" fill="#e53935"/>';
+      // Docs enforces Trusted Types, so no innerHTML: build the paths as elements.
+      const shaft = { d: 'M58 12 H14', stroke: '#e53935', 'stroke-width': '4', 'stroke-linecap': 'round' };
+      const head = { d: 'M2 12 L18 3 L18 21 Z', fill: '#e53935' };
+      for (const attrs of [shaft, head]) {
+        const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        for (const [k, v] of Object.entries(attrs)) p.setAttribute(k, v);
+        svg.appendChild(p);
+      }
       layer.appendChild(svg);
     }
     document.body.appendChild(layer);
@@ -118,6 +124,16 @@ const rows = queue.filter((r) => (only ? r.id === only : r.status === 'todo'));
 if (!rows.length) {
   console.log('Nothing to capture.');
   process.exit(0);
+}
+
+// Chrome locks the profile while it runs; a leftover `npm run login` window makes launch fail.
+try {
+  fs.rmSync(path.join(PROFILE_DIR, 'lockfile'));
+} catch (e) {
+  if (e.code !== 'ENOENT') {
+    console.error('The capture profile is in use. Close the Chrome window from `npm run login` and retry.');
+    process.exit(1);
+  }
 }
 
 const ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
