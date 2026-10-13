@@ -40,6 +40,7 @@ const intersects = (a, b) =>
 
 // Locators become their box plus corner radius (so masks follow rounded dialogs); boxes pass through.
 async function toBox(t) {
+  t = await t;
   if (typeof t.boundingBox !== 'function') return { r: 0, ...t };
   const r = await t.evaluate((el) => parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0);
   return { ...(await t.boundingBox()), r };
@@ -141,11 +142,11 @@ async function captureRow(ctx, row) {
   await recipe.steps(page);
   await page.waitForTimeout(400); // let menu animation settle
 
-  const hlBoxes = [];
-  for (const l of recipe.highlight(page)) hlBoxes.push(await l.boundingBox());
-  if (hlBoxes.some((b) => !b)) throw new Error(`Highlight target not visible for ${row.id}`);
-  const cropBoxes = [];
-  for (const l of recipe.crop(page)) cropBoxes.push(await l.boundingBox());
+  // Recipes may return locators or plain boxes, synchronously or not.
+  const boxesOf = async (fn) => Promise.all((await fn(page)).map((t) => toBox(t).catch(() => null)));
+  const hlBoxes = await boxesOf(recipe.highlight);
+  if (hlBoxes.some((b) => !b?.width)) throw new Error(`Highlight target not visible for ${row.id}`);
+  const cropBoxes = await boxesOf(recipe.crop);
   const arrowBox = recipe.arrowTo != null ? hlBoxes[recipe.arrowTo] : null;
   if (arrowBox) cropBoxes.push({ ...arrowBox, width: arrowBox.width + ARROW_LEN });
   const crop = union([...cropBoxes, ...hlBoxes], recipe.pad ?? PAD);
