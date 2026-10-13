@@ -27,11 +27,11 @@ const REDACT = [
 
 const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8' }).trim();
 
-function union(boxes, pad) {
+function union(boxes, pad, view = VIEWPORT) {
   const x0 = Math.max(0, Math.min(...boxes.map((b) => b.x)) - pad);
   const y0 = Math.max(0, Math.min(...boxes.map((b) => b.y)) - pad);
-  const x1 = Math.min(VIEWPORT.width, Math.max(...boxes.map((b) => b.x + b.width)) + pad);
-  const y1 = Math.min(VIEWPORT.height, Math.max(...boxes.map((b) => b.y + b.height)) + pad);
+  const x1 = Math.min(view.width, Math.max(...boxes.map((b) => b.x + b.width)) + pad);
+  const y1 = Math.min(view.height, Math.max(...boxes.map((b) => b.y + b.height)) + pad);
   return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
 }
 
@@ -132,6 +132,7 @@ async function captureRow(ctx, row) {
   const recipe = recipes[row.id];
   if (!recipe) throw new Error(`No recipe for "${row.id}" in capture/recipes.mjs`);
   const page = ctx.pages()[0] ?? await ctx.newPage();
+  await page.setViewportSize(recipe.viewport ?? VIEWPORT); // tall panels can ask for more room
   await page.goto(row.start_url, { waitUntil: 'domcontentloaded' });
   if (/accounts\.google\.com/.test(page.url())) {
     throw new Error('Not signed in (redirected to accounts.google.com). Run: npm run login');
@@ -151,7 +152,7 @@ async function captureRow(ctx, row) {
   const cropBoxes = await boxesOf(recipe.crop);
   const arrowBox = recipe.arrowTo != null ? hlBoxes[recipe.arrowTo] : null;
   if (arrowBox) cropBoxes.push({ ...arrowBox, width: arrowBox.width + ARROW_LEN });
-  const crop = union([...cropBoxes, ...hlBoxes], recipe.pad ?? PAD);
+  const crop = union([...cropBoxes, ...hlBoxes], recipe.pad ?? PAD, page.viewportSize());
 
   const leaks = await redact(page, crop, recipe.allowRedact);
   if (recipe.focus) {

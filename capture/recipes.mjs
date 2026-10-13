@@ -14,6 +14,7 @@
 //   allowRedact      -> REDACT selectors this shot may show (e.g. the title of THIS public
 //                       training doc when the lesson is about the title bar)
 //   readySelector    -> what to wait for after load (default: the Docs menu bar)
+//   viewport         -> optional { width, height } for this shot (default config VIEWPORT)
 
 const openMenu = async (page, menuId) => {
   await page.locator(`#${menuId}`).click();
@@ -145,6 +146,34 @@ export const recipes = {
     arrowTo: 2,
     focus: async (page) => [await menubarFrom(page, 'docs-file-menu'), fileMenuPanel(page), versionSubmenu(page)],
     shadowOn: [1, 2],
+  },
+
+  // The left panel with this doc's tab expanded into its heading outline.
+  'outline-panel': {
+    viewport: { width: 1280, height: 1150 },
+    steps: async (page) => {
+      const firstLesson = page.getByText('Doc outline', { exact: true }).first();
+      if (!(await firstLesson.isVisible().catch(() => false))) {
+        await page.getByText('Lessons', { exact: true }).first().click();
+      }
+      await firstLesson.waitFor();
+      await page.mouse.move(640, 1100);
+      await page.waitForTimeout(800);
+      // Tag the whole tab "pill" (the label alone is narrower than the highlighted row).
+      await page.getByText('Lessons', { exact: true }).first().evaluate((el) => {
+        while (el && el.getBoundingClientRect().width < 200) el = el.parentElement;
+        el?.setAttribute('data-tda', 'tab-pill');
+      });
+    },
+    highlight: (page) => [tagged(page, 'tab-pill')],
+    // Full sidebar width: from the window edge to just past the pill.
+    crop: async (page) => {
+      const pill = await tagged(page, 'tab-pill').boundingBox();
+      const top = await page.getByText('Document tabs', { exact: true }).first().boundingBox();
+      const bottom = await page.getByText('Screenshot queue', { exact: true }).first().boundingBox();
+      return [{ x: 0, y: top.y, width: pill.x + pill.width + 8, height: bottom.y + bottom.height - top.y }];
+    },
+    pad: 14,
   },
 
   // The ☆ next to the title. Shows the title of this (public) training doc only; account

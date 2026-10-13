@@ -46,5 +46,13 @@
     "highlight": "Starred in the left menu; this doc",
     "alt_text": "Google Drive Starred page showing Google Docs Basics",
     "status": "done"
+  },
+  {
+    "id": "outline-panel",
+    "start_url": "https://docs.google.com/document/d/1sfr1OJLvi4PDzKdEStJvWiX4uhxo1Z8B_PCkoe2dSA4/edit",
+    "steps": "Click the Lessons tab in the left panel so its heading outline expands",
+    "highlight": "Lessons tab",
+    "alt_text": "Left panel with the Lessons tab expanded into the doc outline",
+    "status": "todo"
   }
 ]
