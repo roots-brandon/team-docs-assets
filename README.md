@@ -19,3 +19,13 @@ Each queue id needs a recipe in `capture/recipes.mjs` (steps, highlight targets,
 The job hides the doc title, account avatar/email, and share controls before every shot,
 and crops tight to the menu or dialog. Never commit auth state: the profile lives outside
 the repo and `.gitignore` blocks `.auth/` and `*.storage.json`.
+
+## Other tools
+
+- `node capture/name-version.mjs "<name>" <outdir>` names the doc's current version
+  (File > Version history > Name current version) as the test account. We name a
+  version after each finished lesson; the Version history lesson tells readers to
+  filter to Named versions and click one to see that lesson highlighted.
+- Screenshots of version history show editor names. The `version-history-panel`
+  recipe reads them from the page, replaces them with "Team member", and refuses to
+  capture if any remain, so no names are ever written to this public repo.

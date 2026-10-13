@@ -21,7 +21,7 @@
     "steps": "File > hover Version history; leave submenu open",
     "highlight": "File menu, Version history item, See version history",
     "alt_text": "File menu with Version history open and See version history highlighted",
-    "status": "todo"
+    "status": "done"
   },
   {
     "id": "version-history-panel",
@@ -29,6 +29,6 @@
     "steps": "Open version history (Ctrl+Alt+Shift+H), newest version selected, Next edit to first change; editor names replaced",
     "highlight": "Selected version, Highlight changes, edit counter arrows",
     "alt_text": "Version history panel on this doc with the newest version selected and its changes highlighted",
-    "status": "todo"
+    "status": "done"
   }
 ]
