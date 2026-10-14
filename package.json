@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "login": "node capture/login.mjs",
+    "login:claude": "node capture/login.mjs --profile claude --url https://claude.ai/artifact/F1dJWgUPyfKWuNZ8QM5YSR",
     "capture": "node capture/capture.mjs",
     "capture:dry": "node capture/capture.mjs --headed --no-push"
   },
